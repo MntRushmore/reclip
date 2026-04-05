@@ -364,9 +364,13 @@
       line-height: 1.8;
     }
 
+    .title-short { display: none; }
+
     /* Mobile */
     @media (max-width: 500px) {
       .brand h1 { font-size: 3rem; }
+      .title-full { display: none; }
+      .title-short { display: inline; }
       .page { padding: 40px 16px 60px; }
       .card { flex-direction: column; gap: 10px; }
       .card-thumb {
@@ -383,7 +387,7 @@
 <body>
   <div class="page">
     <div class="brand">
-      <h1>Rushil's Personal <em>Downloader</em></h1>
+      <h1><span class="title-full">Rushil's Personal <em>Downloader</em></span><span class="title-short">R.P.<em>D</em></span></h1>
       <p>Free media downloader</p>
     </div>
 

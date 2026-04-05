@@ -4,13 +4,26 @@ import glob
 import json
 import subprocess
 import threading
-from flask import Flask, request, jsonify, send_file, render_template
+from flask import Flask, request, jsonify, send_file, render_template, session, redirect, url_for
+from functools import wraps
 
 app = Flask(__name__)
+app.secret_key = os.environ.get("SECRET_KEY", os.urandom(24))
 DOWNLOAD_DIR = os.path.join(os.path.dirname(__file__), "downloads")
 os.makedirs(DOWNLOAD_DIR, exist_ok=True)
 
+PASSWORD = os.environ.get("PASSWORD", "")
+
 jobs = {}
+
+
+def auth_required(f):
+    @wraps(f)
+    def decorated(*args, **kwargs):
+        if PASSWORD and not session.get("authed"):
+            return jsonify({"error": "Unauthorized"}), 401
+        return f(*args, **kwargs)
+    return decorated
 
 
 def run_download(job_id, url, format_choice, format_id):
@@ -75,10 +88,21 @@ def run_download(job_id, url, format_choice, format_id):
 
 @app.route("/")
 def index():
+    if PASSWORD and not session.get("authed"):
+        return render_template("login.html")
     return render_template("index.html")
 
 
+@app.route("/login", methods=["POST"])
+def login():
+    if request.form.get("password") == PASSWORD:
+        session["authed"] = True
+        return redirect(url_for("index"))
+    return render_template("login.html", error="Wrong password")
+
+
 @app.route("/api/info", methods=["POST"])
+@auth_required
 def get_info():
     data = request.json
     url = data.get("url", "").strip()
@@ -125,6 +149,7 @@ def get_info():
 
 
 @app.route("/api/download", methods=["POST"])
+@auth_required
 def start_download():
     data = request.json
     url = data.get("url", "").strip()
@@ -146,6 +171,7 @@ def start_download():
 
 
 @app.route("/api/status/<job_id>")
+@auth_required
 def check_status(job_id):
     job = jobs.get(job_id)
     if not job:
@@ -158,11 +184,24 @@ def check_status(job_id):
 
 
 @app.route("/api/file/<job_id>")
+@auth_required
 def download_file(job_id):
     job = jobs.get(job_id)
     if not job or job["status"] != "done":
         return jsonify({"error": "File not ready"}), 404
-    return send_file(job["file"], as_attachment=True, download_name=job["filename"])
+    path = job["file"]
+    filename = job["filename"]
+    jobs.pop(job_id, None)
+
+    def cleanup(p):
+        try:
+            os.remove(p)
+        except OSError:
+            pass
+
+    response = send_file(path, as_attachment=True, download_name=filename)
+    threading.Timer(5.0, cleanup, args=[path]).start()
+    return response
 
 
 if __name__ == "__main__":
