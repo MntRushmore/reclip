@@ -11,6 +11,13 @@ app = Flask(__name__)
 app.secret_key = os.environ.get("SECRET_KEY", os.urandom(24))
 DOWNLOAD_DIR = os.path.join(os.path.dirname(__file__), "downloads")
 os.makedirs(DOWNLOAD_DIR, exist_ok=True)
+COOKIES_FILE = os.path.join(os.path.dirname(__file__), "cookies.txt")
+
+# Allow cookies to be injected via environment variable (for Railway)
+_cookies_env = os.environ.get("COOKIES_CONTENT", "")
+if _cookies_env and not os.path.exists(COOKIES_FILE):
+    with open(COOKIES_FILE, "w") as _f:
+        _f.write(_cookies_env)
 
 PASSWORD = os.environ.get("PASSWORD", "")
 
@@ -31,6 +38,8 @@ def run_download(job_id, url, format_choice, format_id):
     out_template = os.path.join(DOWNLOAD_DIR, f"{job_id}.%(ext)s")
 
     cmd = ["yt-dlp", "--no-playlist", "-o", out_template]
+    if os.path.exists(COOKIES_FILE):
+        cmd += ["--cookies", COOKIES_FILE]
 
     if format_choice == "audio":
         cmd += ["-x", "--audio-format", "mp3"]
@@ -110,6 +119,8 @@ def get_info():
         return jsonify({"error": "No URL provided"}), 400
 
     cmd = ["yt-dlp", "--no-playlist", "-j", url]
+    if os.path.exists(COOKIES_FILE):
+        cmd += ["--cookies", COOKIES_FILE]
     try:
         result = subprocess.run(cmd, capture_output=True, text=True, timeout=60)
         if result.returncode != 0:
